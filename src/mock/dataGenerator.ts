@@ -354,36 +354,42 @@ export function generateMockCycles(): ReportingCycle[] {
 }
 
 export function generateMockUL360Files(): UL360File[] {
+  // Use BASE_URL to ensure files are accessible with correct path prefix
+  const baseUrl = import.meta.env.BASE_URL || '/';
+
   return [
     {
-      id: 'ul360-2026-01-uk',
+      id: 'ul360-2025-10-uk',
       cycleId: 'cycle-2026-01',
-      filename: 'SEGRO_UK_JAN2026_UL360.csv',
+      filename: 'UK Stark Electricity Upload File - October 25.xlsx',
       market: 'UK',
-      generatedAt: '2026-02-01T10:00:00Z',
-      size: 245678,
-      recordCount: 1247,
-      status: 'uploaded',
-    },
-    {
-      id: 'ul360-2026-01-cz',
-      cycleId: 'cycle-2026-01',
-      filename: 'SEGRO_CZ_JAN2026_UL360.csv',
-      market: 'CZ',
-      generatedAt: '2026-02-01T10:05:00Z',
-      size: 189234,
+      generatedAt: '2025-11-07T10:00:00Z',
+      size: 82944, // 81KB
       recordCount: 856,
       status: 'uploaded',
+      downloadUrl: `${baseUrl}uk-october-2025.xlsx`,
     },
     {
-      id: 'ul360-2026-01-eu',
+      id: 'ul360-2025-11-uk',
       cycleId: 'cycle-2026-01',
-      filename: 'SEGRO_EU_JAN2026_UL360.csv',
-      market: 'EU',
-      generatedAt: '2026-02-01T10:08:00Z',
-      size: 312456,
-      recordCount: 1589,
+      filename: 'UK Stark Electricity Upload File - November 25.xlsx',
+      market: 'UK',
+      generatedAt: '2026-01-15T10:05:00Z',
+      size: 91136, // 89KB
+      recordCount: 923,
       status: 'uploaded',
+      downloadUrl: `${baseUrl}uk-november-2025.xlsx`,
+    },
+    {
+      id: 'ul360-2025-12-uk',
+      cycleId: 'cycle-2026-01',
+      filename: 'UK Stark Electricity Upload File - December 25.xlsx',
+      market: 'UK',
+      generatedAt: '2026-01-19T10:08:00Z',
+      size: 35840, // 35KB
+      recordCount: 412,
+      status: 'uploaded',
+      downloadUrl: `${baseUrl}uk-december-2025.xlsx`,
     },
   ];
 }

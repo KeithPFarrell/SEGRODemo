@@ -14,16 +14,32 @@ export default function UL360() {
     loadUL360Files();
   }, [loadUL360Files]);
 
-  const handleDownload = (filename: string) => {
-    // Simulate file download
-    const mockCsvContent = generateMockCSV();
-    const blob = new Blob([mockCsvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    window.URL.revokeObjectURL(url);
+  const handleDownload = async (fileId: string) => {
+    const file = ul360Files.find(f => f.id === fileId);
+    if (file && file.downloadUrl) {
+      try {
+        // Fetch the file as a blob to ensure proper binary handling
+        const response = await fetch(file.downloadUrl);
+        const blob = await response.blob();
+
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+
+        // Create and trigger download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.filename;
+        document.body.appendChild(a);
+        a.click();
+
+        // Cleanup
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download failed:', error);
+        alert('Failed to download file. Please try again.');
+      }
+    }
   };
 
   const generateMockCSV = () => {
@@ -111,7 +127,7 @@ M2002,Prague Central,2026-01-01,2026-01-31,12500,kWh,RCZ201`;
                   variant="primary"
                   size="sm"
                   className="flex-1"
-                  onClick={() => handleDownload(file.filename)}
+                  onClick={() => handleDownload(file.id)}
                 >
                   <Download className="w-4 h-4 mr-1" />
                   Download
@@ -151,8 +167,7 @@ M2002,Prague Central,2026-01-01,2026-01-31,12500,kWh,RCZ201`;
               <Button
                 variant="secondary"
                 onClick={() => {
-                  const file = ul360Files.find(f => f.id === previewFile);
-                  if (file) handleDownload(file.filename);
+                  if (previewFile) handleDownload(previewFile);
                 }}
               >
                 <Download className="w-4 h-4 mr-2" />
