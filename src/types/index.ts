@@ -66,7 +66,7 @@ export interface MeterMetadata {
   regionSID?: string;
   site: string;
   market: Market;
-  utilityType: 'Electricity' | 'Gas' | 'Water';
+  utilityType: 'Electricity' | 'Gas';
 }
 
 export interface ReadingPeriod {
@@ -98,6 +98,15 @@ export interface Comment {
   timestamp: string;
 }
 
+export interface ReportSummary {
+  attemptNumber: number; // 1, 2, 3, etc.
+  totalEntries: number;
+  successfulEntries: number;
+  failedEntries: number;
+  generatedFileId?: string; // Reference to the UL360 file
+  timestamp: string;
+}
+
 export interface ReportingCycle {
   id: string;
   name: string;
@@ -109,11 +118,15 @@ export interface ReportingCycle {
   actualStartDate?: string;
   completedDate?: string;
   exceptionCounts: {
-    total: number;
-    resolved: number;
+    meter: number; // Open Registry exceptions
+    data: number; // Open Reading exceptions
+    meterResolved: number; // Resolved Registry exceptions
+    dataResolved: number; // Resolved Reading exceptions
   };
   stepTimestamps: Record<OrchestrationStep, string | null>;
   activityLog: ActivityLogEntry[];
+  reportSummaries: ReportSummary[]; // Array to track multiple processing attempts
+  verificationAttempts: number; // Track how many times verification has been attempted
 }
 
 export interface ActivityLogEntry {

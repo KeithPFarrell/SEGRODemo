@@ -35,7 +35,7 @@ export const demoSteps: DemoStep[] = [
     route: '/exceptions',
     highlightSelector: '[data-demo="registry-resolution"]',
     autoFillAction: 'resolve-registry',
-    targetExceptionName: 'Amsterdam South - Water Meter',
+    targetExceptionName: 'Amsterdam South - Gas Meter',
   },
   {
     id: 4,

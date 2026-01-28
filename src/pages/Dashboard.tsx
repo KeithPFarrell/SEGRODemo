@@ -57,11 +57,10 @@ export default function Dashboard() {
       <div className="relative bg-gradient-to-r from-segro-charcoal to-segro-midgray rounded-2xl overflow-hidden shadow-xl">
         <div className="absolute inset-0 bg-black opacity-20"></div>
         <div className="relative px-8 py-12 text-white">
-          <h1 className="text-4xl font-bold mb-2">SEGRO Sustainability Dashboard</h1>
-          <p className="text-lg opacity-90">Near Real-Time ESG Utilities Data Backbone</p>
-          <div className="mt-4 flex items-center space-x-2">
+          <h1 className="text-4xl font-bold mb-4">Sustainability Dashboard</h1>
+          <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-segro-teal-accent rounded-full animate-pulse"></div>
-            <span className="text-sm">Live orchestration monitoring powered by HCL Universal Orchestrator</span>
+            <span className="text-sm">Live orchestration monitoring</span>
           </div>
         </div>
       </div>

@@ -22,7 +22,7 @@ interface AppState {
   loadCycles: () => Promise<void>;
   loadCycle: (cycleId: string) => Promise<void>;
   runCycle: (cycleId: string) => Promise<void>;
-  verifyUL360: (cycleId: string, success: boolean) => Promise<void>;
+  verifyUL360: (cycleId: string, success: boolean) => Promise<{ cycle: ReportingCycle; verificationFailed?: boolean; newExceptionsCount?: number }>;
   uploadFailureFile: (cycleId: string, file: File) => Promise<void>;
 
   // Exceptions
@@ -31,6 +31,7 @@ interface AppState {
   loadExceptions: (cycleId: string) => Promise<void>;
   loadExceptionsFromMultipleCycles: (cycleIds: string[]) => Promise<void>;
   loadException: (exceptionId: string) => Promise<void>;
+  clearSelectedException: () => void;
   updateException: (exceptionId: string, updates: Partial<ExceptionItem>) => Promise<void>;
   resolveException: (exceptionId: string, resolution: string) => Promise<void>;
   addComment: (exceptionId: string, text: string) => Promise<void>;
@@ -121,24 +122,16 @@ export const useStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const currentUser = get().currentUser?.name || 'System';
-      const cycle = await api.verifyUL360Upload(cycleId, currentUser, success);
+      const result = await api.verifyUL360Upload(cycleId, currentUser, success);
 
-      const cycles = get().cycles.map(c => c.id === cycle.id ? cycle : c);
-      set({ cycles, selectedCycle: cycle, loading: false });
+      const cycles = get().cycles.map(c => c.id === result.cycle.id ? result.cycle : c);
+      set({ cycles, selectedCycle: result.cycle, loading: false });
 
-      // If successful, update Archive timestamp after 1 second
-      if (success) {
-        setTimeout(() => {
-          const updatedCycle = get().cycles.find(c => c.id === cycleId);
-          if (updatedCycle) {
-            updatedCycle.stepTimestamps['Archive'] = new Date().toISOString();
-            const refreshedCycles = get().cycles.map(c => c.id === cycleId ? updatedCycle : c);
-            set({ cycles: refreshedCycles, selectedCycle: updatedCycle });
-          }
-        }, 1000);
-      }
+      // Return the result so the component can handle it
+      return result;
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
+      throw error;
     }
   },
 
@@ -190,6 +183,10 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
+  },
+
+  clearSelectedException: () => {
+    set({ selectedException: null });
   },
 
   updateException: async (exceptionId, updates) => {

@@ -40,7 +40,7 @@ const sitesByMarket: Record<Market, string[]> = {
   'EU': ['Berlin West', 'Amsterdam South'],
 };
 
-const utilityTypes: Array<'Electricity' | 'Gas' | 'Water'> = ['Electricity', 'Gas', 'Water'];
+const utilityTypes: Array<'Electricity' | 'Gas'> = ['Electricity', 'Gas'];
 
 export function generateMockUsers(): User[] {
   return [
@@ -178,7 +178,7 @@ export function generateMockExceptions(cycleId: string, seed: number = 42): Exce
           : `R${market}${rng.nextInt(100, 999)}`,
         site,
         market,
-        utilityType: utilityType as 'Electricity' | 'Gas' | 'Water',
+        utilityType: utilityType as 'Electricity' | 'Gas',
       },
       period: exceptionType === 'Reading' ? {
         startDate: '2026-01-01',
@@ -283,8 +283,10 @@ export function generateMockCycles(): ReportingCycle[] {
     scheduledStartDate: '2026-02-01T00:00:00Z',
     actualStartDate: '2026-02-01T08:30:00Z',
     exceptionCounts: {
-      total: 5,
-      resolved: 0,
+      meter: 2,
+      data: 3,
+      meterResolved: 0,
+      dataResolved: 0,
     },
     stepTimestamps: {
       'Ingest': '2026-02-01T08:30:00Z',
@@ -296,6 +298,17 @@ export function generateMockCycles(): ReportingCycle[] {
       'Archive': null,
     },
     activityLog: [],
+    reportSummaries: [
+      {
+        attemptNumber: 1,
+        totalEntries: 1247,
+        successfulEntries: 1242,
+        failedEntries: 5,
+        generatedFileId: 'ul360-generated-cycle-2026-01',
+        timestamp: '2026-02-01T10:00:00Z',
+      },
+    ],
+    verificationAttempts: 0,
   });
 
   // Completed cycle - December 2025
@@ -310,8 +323,10 @@ export function generateMockCycles(): ReportingCycle[] {
     actualStartDate: '2026-01-01T08:00:00Z',
     completedDate: '2026-01-01T16:30:00Z',
     exceptionCounts: {
-      total: 7,
-      resolved: 7,
+      meter: 0,
+      data: 0,
+      meterResolved: 3,
+      dataResolved: 4,
     },
     stepTimestamps: {
       'Ingest': '2026-01-01T08:00:00Z',
@@ -323,6 +338,17 @@ export function generateMockCycles(): ReportingCycle[] {
       'Archive': '2026-01-01T16:30:00Z',
     },
     activityLog: [],
+    reportSummaries: [
+      {
+        attemptNumber: 1,
+        totalEntries: 1183,
+        successfulEntries: 1176,
+        failedEntries: 7,
+        generatedFileId: 'ul360-generated-cycle-2025-12',
+        timestamp: '2026-01-01T14:00:00Z',
+      },
+    ],
+    verificationAttempts: 1,
   });
 
   // Scheduled future cycle - February 2026
@@ -335,8 +361,10 @@ export function generateMockCycles(): ReportingCycle[] {
     ul360Status: 'pending',
     scheduledStartDate: '2026-03-01T00:00:00Z',
     exceptionCounts: {
-      total: 0,
-      resolved: 0,
+      meter: 0,
+      data: 0,
+      meterResolved: 0,
+      dataResolved: 0,
     },
     stepTimestamps: {
       'Ingest': null,
@@ -348,6 +376,8 @@ export function generateMockCycles(): ReportingCycle[] {
       'Archive': null,
     },
     activityLog: [],
+    reportSummaries: [],
+    verificationAttempts: 0,
   });
 
   return cycles;
@@ -358,6 +388,31 @@ export function generateMockUL360Files(): UL360File[] {
   const baseUrl = import.meta.env.BASE_URL || '/';
 
   return [
+    // Generated file for December 2025 cycle
+    {
+      id: 'ul360-generated-cycle-2025-12',
+      cycleId: 'cycle-2025-12',
+      filename: 'UK Upload File - December 2025.xlsx',
+      market: 'UK',
+      generatedAt: '2026-01-01T14:00:00Z',
+      size: 86432, // ~84KB
+      recordCount: 1183,
+      status: 'uploaded',
+      downloadUrl: `${baseUrl}uk-december-2025.xlsx`,
+    },
+    // Generated file for January 2026 cycle
+    {
+      id: 'ul360-generated-cycle-2026-01',
+      cycleId: 'cycle-2026-01',
+      filename: 'UK Upload File - January 2026.xlsx',
+      market: 'UK',
+      generatedAt: '2026-02-01T10:00:00Z',
+      size: 89856, // ~88KB
+      recordCount: 1247,
+      status: 'uploaded',
+      downloadUrl: `${baseUrl}uk-november-2025.xlsx`,
+    },
+    // Original UL360 files for reference
     {
       id: 'ul360-2025-10-uk',
       cycleId: 'cycle-2026-01',
@@ -379,17 +434,6 @@ export function generateMockUL360Files(): UL360File[] {
       recordCount: 923,
       status: 'uploaded',
       downloadUrl: `${baseUrl}uk-november-2025.xlsx`,
-    },
-    {
-      id: 'ul360-2025-12-uk',
-      cycleId: 'cycle-2026-01',
-      filename: 'UK Stark Electricity Upload File - December 25.xlsx',
-      market: 'UK',
-      generatedAt: '2026-01-19T10:08:00Z',
-      size: 35840, // 35KB
-      recordCount: 412,
-      status: 'uploaded',
-      downloadUrl: `${baseUrl}uk-december-2025.xlsx`,
     },
   ];
 }

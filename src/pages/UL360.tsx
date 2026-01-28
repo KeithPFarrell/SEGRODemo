@@ -14,6 +14,11 @@ export default function UL360() {
     loadUL360Files();
   }, [loadUL360Files]);
 
+  // Sort files by generated date (newest first)
+  const sortedFiles = [...ul360Files].sort((a, b) => {
+    return new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime();
+  });
+
   const handleDownload = async (fileId: string) => {
     const file = ul360Files.find(f => f.id === fileId);
     if (file && file.downloadUrl) {
@@ -75,7 +80,7 @@ M2002,Prague Central,2026-01-01,2026-01-31,12500,kWh,RCZ201`;
 
       {/* Files List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {ul360Files.map(file => (
+        {sortedFiles.map(file => (
           <Card key={file.id}>
             <div className="space-y-4">
               {/* Header */}

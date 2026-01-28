@@ -1,28 +1,33 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Play, CheckCircle, Upload, X } from 'lucide-react';
 import Card from '../components/Card';
 import Badge from '../components/Badge';
 import Button from '../components/Button';
 import Timeline from '../components/Timeline';
 import OrchestrationProgress from '../components/OrchestrationProgress';
+import ReportSummary from '../components/ReportSummary';
 import { useStore } from '../store';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { formatDateTime, formatTimeAgo } from '../utils/formatters';
 import { ReportingCycle } from '../types';
 
 export default function ReportingCycles() {
-  const { cycles, loadCycles, runCycle, verifyUL360, uploadFailureFile } = useStore();
+  const navigate = useNavigate();
+  const { cycles, loadCycles, runCycle, verifyUL360, uploadFailureFile, ul360Files, loadUL360Files } = useStore();
   const { isDemoMode, currentStep, updateImpactMetrics, impactMetrics, registerStepCallback, unregisterStepCallback } = useDemoMode();
   const [selectedCycle, setSelectedCycle] = useState<ReportingCycle | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isOrchestrating, setIsOrchestrating] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadCycles();
-  }, [loadCycles]);
+    loadUL360Files();
+  }, [loadCycles, loadUL360Files]);
 
   // Auto-select first cycle when cycles load
   useEffect(() => {
@@ -106,15 +111,69 @@ export default function ReportingCycles() {
 
   const handleVerify = async (success: boolean) => {
     if (!selectedCycle) return;
-    await verifyUL360(selectedCycle.id, success);
-    const updatedCycle = cycles.find(c => c.id === selectedCycle.id);
-    if (updatedCycle) setSelectedCycle(updatedCycle);
 
-    // Update demo mode metrics
-    if (isDemoMode) {
-      updateImpactMetrics({
-        hoursAvoided: impactMetrics.hoursAvoided + 1.5,
-        timeReduction: Math.min(impactMetrics.timeReduction + 10, 85),
+    // Clear any previous verification message
+    setVerificationMessage(null);
+
+    try {
+      const result = await verifyUL360(selectedCycle.id, success);
+
+      // Reload cycles and files immediately
+      await loadCycles();
+      await loadUL360Files();
+      const updatedCycle = cycles.find(c => c.id === selectedCycle.id);
+      if (updatedCycle) setSelectedCycle(updatedCycle);
+
+      // Check if verification failed (found new exceptions)
+      if (result.verificationFailed) {
+        setVerificationMessage({
+          type: 'error',
+          text: `Verification failed: Found ${result.newExceptionsCount} additional exceptions (1 meter, 1 data). Reprocessing will begin automatically...`,
+        });
+
+        // Poll for updates to catch the reprocessing (happens after 3 seconds)
+        let pollCount = 0;
+        const pollInterval = setInterval(async () => {
+          pollCount++;
+          await loadCycles();
+          await loadUL360Files();
+          const refreshedCycle = cycles.find(c => c.id === selectedCycle.id);
+          if (refreshedCycle) {
+            setSelectedCycle(refreshedCycle);
+          }
+
+          // Stop polling after 5 seconds (enough time to catch reprocessing)
+          if (pollCount >= 5) {
+            clearInterval(pollInterval);
+            // Update message to indicate reprocessing is complete
+            setVerificationMessage({
+              type: 'error',
+              text: `Verification failed: Found ${result.newExceptionsCount} additional exceptions. Reprocessing complete. Please resolve all exceptions and verify again.`,
+            });
+          }
+        }, 1000);
+      } else if (success) {
+        // Verification succeeded
+        setVerificationMessage({
+          type: 'success',
+          text: 'Verification successful! Upload verified and cycle archived.',
+        });
+
+        // Clear message after 5 seconds
+        setTimeout(() => setVerificationMessage(null), 5000);
+      }
+
+      // Update demo mode metrics
+      if (isDemoMode) {
+        updateImpactMetrics({
+          hoursAvoided: impactMetrics.hoursAvoided + 1.5,
+          timeReduction: Math.min(impactMetrics.timeReduction + 10, 85),
+        });
+      }
+    } catch (error) {
+      setVerificationMessage({
+        type: 'error',
+        text: 'Verification failed: An error occurred. Please try again.',
       });
     }
   };
@@ -126,6 +185,44 @@ export default function ReportingCycles() {
     setUploadFile(null);
     const updatedCycle = cycles.find(c => c.id === selectedCycle.id);
     if (updatedCycle) setSelectedCycle(updatedCycle);
+  };
+
+  const handleNavigateToExceptions = (typeFilter: 'meter' | 'data', statusFilter: 'open' | 'resolved') => {
+    navigate('/exceptions', {
+      state: {
+        typeFilter,
+        statusFilter,
+        cycleId: selectedCycle?.id
+      }
+    });
+  };
+
+  const handleDownloadFile = async (fileId: string) => {
+    const file = ul360Files.find(f => f.id === fileId);
+    if (file && file.downloadUrl) {
+      try {
+        // Fetch the file as a blob to ensure proper binary handling
+        const response = await fetch(file.downloadUrl);
+        const blob = await response.blob();
+
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+
+        // Create and trigger download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.filename;
+        document.body.appendChild(a);
+        a.click();
+
+        // Cleanup
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download failed:', error);
+        alert('Failed to download file. Please try again.');
+      }
+    }
   };
 
   const getStatusVariant = (status: string) => {
@@ -190,8 +287,9 @@ export default function ReportingCycles() {
                       </Badge>
                     ))}
                   </div>
-                  <div className="text-segro-midgray">
-                    {cycle.exceptionCounts.total} exceptions
+                  <div className="text-segro-midgray text-xs">
+                    <div>{cycle.exceptionCounts.meter} meter</div>
+                    <div>{cycle.exceptionCounts.data} data</div>
                   </div>
                 </div>
               </div>
@@ -247,6 +345,7 @@ export default function ReportingCycles() {
                         <Button
                           variant="primary"
                           onClick={() => handleVerify(true)}
+                          disabled={selectedCycle.exceptionCounts.meter > 0 || selectedCycle.exceptionCounts.data > 0}
                           data-demo="verify-upload"
                           className={isDemoMode && currentStep === 6 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
                         >
@@ -264,6 +363,28 @@ export default function ReportingCycles() {
                     )}
                   </div>
 
+                  {selectedCycle.status === 'awaiting_verification' && (selectedCycle.exceptionCounts.meter > 0 || selectedCycle.exceptionCounts.data > 0) && (
+                    <p className="text-xs text-orange-600 italic">
+                      All exceptions must be resolved before verification ({selectedCycle.exceptionCounts.meter} meter, {selectedCycle.exceptionCounts.data} data remaining)
+                    </p>
+                  )}
+
+                  {/* Verification Status Message */}
+                  {verificationMessage && (
+                    <div className={`rounded-lg p-4 ${
+                      verificationMessage.type === 'error'
+                        ? 'bg-red-50 border border-red-200'
+                        : 'bg-green-50 border border-green-200'
+                    }`}>
+                      <p className={`text-sm font-medium ${
+                        verificationMessage.type === 'error'
+                          ? 'text-red-800'
+                          : 'text-green-800'
+                      }`}>
+                        {verificationMessage.text}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -272,6 +393,15 @@ export default function ReportingCycles() {
                 <OrchestrationProgress
                   currentStep={selectedCycle.currentStep}
                   isOrchestrating={isOrchestrating}
+                />
+              )}
+
+              {/* Report Summary - Shows after report runs */}
+              {selectedCycle.reportSummaries && selectedCycle.reportSummaries.length > 0 && (
+                <ReportSummary
+                  reportSummaries={selectedCycle.reportSummaries}
+                  ul360Files={ul360Files.filter(f => selectedCycle.reportSummaries.some(s => s.generatedFileId === f.id))}
+                  onDownload={handleDownloadFile}
                 />
               )}
 
@@ -315,17 +445,41 @@ export default function ReportingCycles() {
               <Card>
                 <h3 className="text-xl font-bold text-segro-charcoal mb-4">Exception Summary</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-segro-offwhite rounded-lg p-4">
-                    <div className="text-2xl font-bold text-segro-charcoal">
-                      {selectedCycle.exceptionCounts.total}
+                  <div
+                    className="bg-blue-50 rounded-lg p-4 cursor-pointer hover:bg-blue-100 transition-colors"
+                    onClick={() => handleNavigateToExceptions('meter', 'open')}
+                  >
+                    <div className="text-2xl font-bold text-blue-600">
+                      {selectedCycle.exceptionCounts.meter}
                     </div>
-                    <div className="text-sm text-segro-midgray">Total Exceptions</div>
+                    <div className="text-sm text-segro-midgray">Meter Open</div>
                   </div>
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-segro-teal-accent">
-                      {selectedCycle.exceptionCounts.resolved}
+                  <div
+                    className="bg-blue-100 rounded-lg p-4 cursor-pointer hover:bg-blue-200 transition-colors"
+                    onClick={() => handleNavigateToExceptions('meter', 'resolved')}
+                  >
+                    <div className="text-2xl font-bold text-blue-700">
+                      {selectedCycle.exceptionCounts.meterResolved}
                     </div>
-                    <div className="text-sm text-segro-midgray">Resolved</div>
+                    <div className="text-sm text-segro-midgray">Meter Resolved</div>
+                  </div>
+                  <div
+                    className="bg-orange-50 rounded-lg p-4 cursor-pointer hover:bg-orange-100 transition-colors"
+                    onClick={() => handleNavigateToExceptions('data', 'open')}
+                  >
+                    <div className="text-2xl font-bold text-orange-600">
+                      {selectedCycle.exceptionCounts.data}
+                    </div>
+                    <div className="text-sm text-segro-midgray">Data Open</div>
+                  </div>
+                  <div
+                    className="bg-orange-100 rounded-lg p-4 cursor-pointer hover:bg-orange-200 transition-colors"
+                    onClick={() => handleNavigateToExceptions('data', 'resolved')}
+                  >
+                    <div className="text-2xl font-bold text-orange-700">
+                      {selectedCycle.exceptionCounts.dataResolved}
+                    </div>
+                    <div className="text-sm text-segro-midgray">Data Resolved</div>
                   </div>
                 </div>
               </Card>

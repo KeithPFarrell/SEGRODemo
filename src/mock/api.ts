@@ -22,17 +22,17 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 let exceptions: Record<string, ExceptionItem[]> = {
   'cycle-2026-01': [
     ...generateMockExceptions('cycle-2026-01', 42),
-    // Exception 1: Amsterdam South - Water Meter - Registry exception (Demo Step 3)
+    // Exception 1: Amsterdam South - Gas Meter - Registry exception (Demo Step 3)
     {
       id: 'exc-cycle-2026-01-registry-demo',
       type: 'Registry',
       status: 'open',
       meterMetadata: {
-        name: 'Amsterdam South - Water Meter',
+        name: 'Amsterdam South - Gas Meter',
         meterId: 'MEU9234',
         site: 'Amsterdam South',
         market: 'EU',
-        utilityType: 'Water',
+        utilityType: 'Gas',
       },
       violations: [
         {
@@ -54,18 +54,18 @@ let exceptions: Record<string, ExceptionItem[]> = {
       comments: [],
       lineageSource: 'SFTP Upload',
     },
-    // Exception 2: Prague Central - Water Meter 4 - Unit mismatch (Demo Step 4)
+    // Exception 2: Prague Central - Electricity Meter 4 - Unit mismatch (Demo Step 4)
     {
       id: 'exc-cycle-2026-01-unit-mismatch',
       type: 'Reading',
       status: 'open',
       meterMetadata: {
-        name: 'Prague Central - Water Meter 4',
+        name: 'Prague Central - Electricity Meter 4',
         meterId: 'MCZ2678',
         regionSID: 'RCZ201',
         site: 'Prague Central',
         market: 'CZ',
-        utilityType: 'Water',
+        utilityType: 'Electricity',
       },
       period: {
         startDate: '2026-01-01',
@@ -183,12 +183,16 @@ let cycles = generateMockCycles();
 function syncExceptionCounts() {
   cycles.forEach(cycle => {
     const cycleExceptions = exceptions[cycle.id] || [];
-    const openCount = cycleExceptions.filter(e => e.status !== 'resolved').length;
-    const resolvedCount = cycleExceptions.filter(e => e.status === 'resolved').length;
+    const meterCount = cycleExceptions.filter(e => e.status !== 'resolved' && e.type === 'Registry').length;
+    const dataCount = cycleExceptions.filter(e => e.status !== 'resolved' && e.type === 'Reading').length;
+    const meterResolvedCount = cycleExceptions.filter(e => e.status === 'resolved' && e.type === 'Registry').length;
+    const dataResolvedCount = cycleExceptions.filter(e => e.status === 'resolved' && e.type === 'Reading').length;
 
     cycle.exceptionCounts = {
-      total: openCount,
-      resolved: resolvedCount,
+      meter: meterCount,
+      data: dataCount,
+      meterResolved: meterResolvedCount,
+      dataResolved: dataResolvedCount,
     };
   });
 }
@@ -286,7 +290,165 @@ async function simulateOrchestration(cycle: ReportingCycle) {
 
     // Generate exceptions during validation step
     if (step === 'Validate') {
-      const newExceptions = generateMockExceptions(cycle.id, Date.now());
+      let newExceptions: ExceptionItem[];
+
+      // For February 2026, generate specific exceptions to match expected counts (1 meter, 3 data)
+      if (cycle.id === 'cycle-2026-02') {
+        newExceptions = [
+          // 1 Meter exception
+          {
+            id: `exc-${cycle.id}-meter-1`,
+            type: 'Registry',
+            status: 'open',
+            meterMetadata: {
+              name: 'Birmingham East - Gas Meter',
+              meterId: 'MUK8765',
+              site: 'Birmingham East',
+              market: 'UK',
+              utilityType: 'Gas',
+            },
+            violations: [
+              {
+                type: 'missing_field',
+                field: 'meterId',
+                message: 'Meter ID not found in registry',
+                actualValue: 'MUK8765',
+              },
+            ],
+            suggestions: [
+              {
+                action: 'Update Meter Registry',
+                description: 'Add this meter to the central registry',
+                autoFixAvailable: false,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            comments: [],
+            lineageSource: 'SFTP Upload',
+          },
+          // 3 Data exceptions
+          {
+            id: `exc-${cycle.id}-data-1`,
+            type: 'Reading',
+            status: 'open',
+            meterMetadata: {
+              name: 'Tilbury - Electricity Meter 5',
+              meterId: 'MUK5432',
+              site: 'Tilbury',
+              market: 'UK',
+              utilityType: 'Electricity',
+            },
+            period: {
+              startDate: '2026-02-15',
+              endDate: '2026-02-10',
+            },
+            value: 15340,
+            units: 'kWh',
+            violations: [
+              {
+                type: 'date_range_invalid',
+                field: 'period',
+                message: 'Start date must be before end date',
+                expectedValue: '2026-02-10 < 2026-02-15',
+                actualValue: '2026-02-15 >= 2026-02-10',
+              },
+            ],
+            suggestions: [
+              {
+                action: 'Correct Date Range',
+                description: 'Swap start and end dates',
+                autoFixAvailable: true,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            comments: [],
+            lineageSource: 'SFTP Upload',
+          },
+          {
+            id: `exc-${cycle.id}-data-2`,
+            type: 'Reading',
+            status: 'open',
+            meterMetadata: {
+              name: 'Heathrow - Gas Meter 8',
+              meterId: 'MUK6789',
+              site: 'Heathrow',
+              market: 'UK',
+              utilityType: 'Gas',
+              regionSID: 'RUK124',
+            },
+            period: {
+              startDate: '2026-02-01',
+              endDate: '2026-02-28',
+            },
+            value: 8950,
+            units: 'm³',
+            violations: [
+              {
+                type: 'unit_mismatch',
+                field: 'units',
+                message: 'Unit mismatch for utility type',
+                expectedValue: 'kWh',
+                actualValue: 'm³',
+              },
+            ],
+            suggestions: [
+              {
+                action: 'Convert to kWh',
+                description: 'Apply conversion factor for gas',
+                autoFixAvailable: true,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            comments: [],
+            lineageSource: 'SFTP Upload',
+          },
+          {
+            id: `exc-${cycle.id}-data-3`,
+            type: 'Reading',
+            status: 'open',
+            meterMetadata: {
+              name: 'Park Royal - Gas Meter 3',
+              meterId: 'MUK3456',
+              site: 'Park Royal',
+              market: 'UK',
+              utilityType: 'Gas',
+            },
+            period: {
+              startDate: '2026-02-01',
+              endDate: '2026-02-28',
+            },
+            value: -450,
+            units: 'kWh',
+            violations: [
+              {
+                type: 'negative_value',
+                field: 'value',
+                message: 'Reading value cannot be negative',
+                expectedValue: '>= 0',
+                actualValue: -450,
+              },
+            ],
+            suggestions: [
+              {
+                action: 'Correct Value',
+                description: 'Enter positive meter reading',
+                autoFixAvailable: false,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            comments: [],
+            lineageSource: 'SFTP Upload',
+          },
+        ];
+      } else {
+        // For other cycles, generate random exceptions
+        newExceptions = generateMockExceptions(cycle.id, Date.now());
+      }
+
       exceptions[cycle.id] = newExceptions;
 
       // Sync exception counts with actual generated exceptions
@@ -305,11 +467,48 @@ async function simulateOrchestration(cycle: ReportingCycle) {
     if (step === 'Prepare UL 360') {
       cycle.ul360Status = 'prepared';
 
+      // Generate new UL360 file for this cycle
+      const baseUrl = typeof window !== 'undefined' ? (import.meta.env.BASE_URL || '/') : '/';
+      const attemptNumber = cycle.reportSummaries.length + 1;
+      const newFileId = `ul360-generated-${cycle.id}-attempt-${attemptNumber}-${Date.now()}`;
+      const cycleExceptions = exceptions[cycle.id] || [];
+      const totalEntries = 1000 + Math.floor(Math.random() * 500); // Random total entries
+      const failedEntries = cycleExceptions.filter(e => e.status !== 'resolved').length;
+      const successfulEntries = totalEntries - failedEntries;
+
+      // Extract reporting period from cycle name (e.g., "February 2026 Reporting" -> "February 2026")
+      const reportingPeriod = cycle.name.replace(' Reporting', '');
+
+      const newFile = {
+        id: newFileId,
+        cycleId: cycle.id,
+        filename: `${cycle.markets[0]} Upload File - ${reportingPeriod}${attemptNumber > 1 ? ` (Attempt ${attemptNumber})` : ''}.xlsx`,
+        market: cycle.markets[0],
+        generatedAt: new Date().toISOString(),
+        size: 82944 + Math.floor(Math.random() * 10000), // Random size around 81-91KB
+        recordCount: totalEntries,
+        status: 'uploaded' as const,
+        downloadUrl: `${baseUrl}uk-october-2025.xlsx`, // Use existing file as template
+      };
+
+      ul360Files.push(newFile);
+
+      // Add report summary to cycle
+      const newSummary = {
+        attemptNumber,
+        totalEntries,
+        successfulEntries,
+        failedEntries,
+        generatedFileId: newFileId,
+        timestamp: new Date().toISOString(),
+      };
+      cycle.reportSummaries.push(newSummary);
+
       logActivity(
         'HCL Universal Orchestrator',
-        'Prepared UL 360 Files',
+        `Prepared UL 360 Files${attemptNumber > 1 ? ` (Attempt ${attemptNumber})` : ''}`,
         `Cycle: ${cycle.name}`,
-        `Generated upload files for ${cycle.markets.join(', ')} markets`,
+        `Generated upload files for ${cycle.markets.join(', ')} markets - ${successfulEntries} successful, ${failedEntries} failed`,
         cycle.id
       );
     }
@@ -457,27 +656,192 @@ export async function verifyUL360Upload(
   cycleId: string,
   currentUser: string,
   success: boolean
-): Promise<ReportingCycle> {
+): Promise<{ cycle: ReportingCycle; verificationFailed?: boolean; newExceptionsCount?: number }> {
   await delay(800);
 
   const cycle = cycles.find(c => c.id === cycleId);
   if (!cycle) throw new Error('Cycle not found');
 
+  // Increment verification attempts
+  cycle.verificationAttempts += 1;
+
   if (success) {
-    cycle.ul360Status = 'verified';
-    cycle.status = 'completed';
-    cycle.currentStep = 'Archive';
-    cycle.completedDate = new Date().toISOString();
+    // On first verification attempt, simulate finding 2 additional exceptions
+    if (cycle.verificationAttempts === 1) {
+      // Generate 2 new exceptions discovered during verification
+      const cycleExceptions = exceptions[cycle.id] || [];
 
-    logActivity(
-      currentUser,
-      'Verified UL 360 Upload',
-      `Cycle: ${cycle.name}`,
-      'Upload verified successfully, cycle archived',
-      cycleId
-    );
+      // Create 2 verification exceptions - 1 meter, 1 data
+      const verificationException1: ExceptionItem = {
+        id: `exc-${cycle.id}-verification-meter-${Date.now()}`,
+        type: 'Registry',
+        status: 'open',
+        meterMetadata: {
+          name: 'Manchester West - Gas Meter 12',
+          meterId: 'MUK9871',
+          site: 'Manchester West',
+          market: 'UK',
+          utilityType: 'Gas',
+        },
+        violations: [
+          {
+            type: 'missing_region_sid',
+            field: 'regionSID',
+            message: 'Region SID missing in upload file',
+          },
+        ],
+        suggestions: [
+          {
+            action: 'Add Region SID',
+            description: 'Populate missing Region SID from meter registry',
+            autoFixAvailable: true,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+        lineageSource: 'UL 360 Verification',
+      };
 
-    // Archive timestamp will be set by the store after 1 second
+      const verificationException2: ExceptionItem = {
+        id: `exc-${cycle.id}-verification-data-${Date.now()}`,
+        type: 'Reading',
+        status: 'open',
+        meterMetadata: {
+          name: 'Leeds North - Electricity Meter 8',
+          meterId: 'MUK6543',
+          site: 'Leeds North',
+          market: 'UK',
+          utilityType: 'Electricity',
+          regionSID: 'RUK145',
+        },
+        period: {
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+        },
+        value: 45000,
+        units: 'kWh',
+        violations: [
+          {
+            type: 'unusual_value',
+            field: 'value',
+            message: 'Reading value significantly higher than historical average',
+            expectedValue: '< 30000',
+            actualValue: 45000,
+          },
+        ],
+        suggestions: [
+          {
+            action: 'Verify Reading',
+            description: 'Confirm with site manager that reading is accurate',
+            autoFixAvailable: false,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+        lineageSource: 'UL 360 Verification',
+      };
+
+      // Add the new exceptions
+      cycleExceptions.push(verificationException1, verificationException2);
+      exceptions[cycle.id] = cycleExceptions;
+
+      // Sync exception counts
+      syncExceptionCounts();
+
+      // Keep status as awaiting_verification since new exceptions were found
+      cycle.ul360Status = 'uploaded';
+
+      logActivity(
+        currentUser,
+        'Verification Failed - New Exceptions Found',
+        `Cycle: ${cycle.name}`,
+        'UL 360 verification found 2 additional exceptions (1 meter, 1 data). Reprocessing failed entries...',
+        cycleId
+      );
+
+      // Return immediately with failure indicator
+      // Reprocessing will happen asynchronously
+      const resultToReturn = { cycle, verificationFailed: true, newExceptionsCount: 2 };
+
+      // Trigger reprocessing automatically after delay
+      setTimeout(async () => {
+        // Reprocess only the failed entries
+        const baseUrl = typeof window !== 'undefined' ? (import.meta.env.BASE_URL || '/') : '/';
+        const attemptNumber = cycle.reportSummaries.length + 1;
+        const newFileId = `ul360-generated-${cycle.id}-attempt-${attemptNumber}-${Date.now()}`;
+
+        // Get current exceptions for this cycle
+        const currentExceptions = exceptions[cycle.id] || [];
+        const openExceptions = currentExceptions.filter(e => e.status !== 'resolved');
+
+        // Calculate entries - reprocessing only previously failed + new exceptions
+        const previousSummary = cycle.reportSummaries[cycle.reportSummaries.length - 1];
+        const totalEntries = previousSummary.failedEntries + 2; // Previously failed + 2 new
+        const failedEntries = openExceptions.length;
+        const successfulEntries = totalEntries - failedEntries;
+
+        // Extract reporting period from cycle name
+        const reportingPeriod = cycle.name.replace(' Reporting', '');
+
+        const newFile = {
+          id: newFileId,
+          cycleId: cycle.id,
+          filename: `${cycle.markets[0]} Upload File - ${reportingPeriod} (Attempt ${attemptNumber}).xlsx`,
+          market: cycle.markets[0],
+          generatedAt: new Date().toISOString(),
+          size: 82944 + Math.floor(Math.random() * 10000),
+          recordCount: totalEntries,
+          status: 'uploaded' as const,
+          downloadUrl: `${baseUrl}uk-october-2025.xlsx`,
+        };
+
+        ul360Files.push(newFile);
+
+        // Add new report summary
+        const newSummary = {
+          attemptNumber,
+          totalEntries,
+          successfulEntries,
+          failedEntries,
+          generatedFileId: newFileId,
+          timestamp: new Date().toISOString(),
+        };
+        cycle.reportSummaries.push(newSummary);
+
+        logActivity(
+          'HCL Universal Orchestrator',
+          `Reprocessed Failed Entries (Attempt ${attemptNumber})`,
+          `Cycle: ${cycle.name}`,
+          `Reprocessed ${totalEntries} entries - ${successfulEntries} successful, ${failedEntries} failed`,
+          cycle.id
+        );
+
+        // Trigger cycle reload in UI
+        syncExceptionCounts();
+      }, 3000); // 3 second delay for reprocessing
+
+      return resultToReturn;
+
+    } else {
+      // Second or later verification - success
+      cycle.ul360Status = 'verified';
+      cycle.status = 'completed';
+      cycle.currentStep = 'Archive';
+      cycle.completedDate = new Date().toISOString();
+      cycle.stepTimestamps['Archive'] = new Date().toISOString();
+
+      logActivity(
+        currentUser,
+        'Verified UL 360 Upload',
+        `Cycle: ${cycle.name}`,
+        'Upload verified successfully, cycle archived',
+        cycleId
+      );
+
+      return { cycle };
+    }
   } else {
     cycle.ul360Status = 'failed';
 
@@ -488,9 +852,9 @@ export async function verifyUL360Upload(
       'Upload verification failed, requires regeneration',
       cycleId
     );
-  }
 
-  return cycle;
+    return { cycle };
+  }
 }
 
 export async function uploadFailureFile(
@@ -565,17 +929,17 @@ export async function resetAllData(): Promise<void> {
   exceptions = {
     'cycle-2026-01': [
       ...generateMockExceptions('cycle-2026-01', 42),
-      // Exception 1: Amsterdam South - Water Meter - Registry exception (Demo Step 3)
+      // Exception 1: Amsterdam South - Gas Meter - Registry exception (Demo Step 3)
       {
         id: 'exc-cycle-2026-01-registry-demo',
         type: 'Registry',
         status: 'open',
         meterMetadata: {
-          name: 'Amsterdam South - Water Meter',
+          name: 'Amsterdam South - Gas Meter',
           meterId: 'MEU9234',
           site: 'Amsterdam South',
           market: 'EU',
-          utilityType: 'Water',
+          utilityType: 'Gas',
         },
         violations: [
           {
@@ -597,18 +961,18 @@ export async function resetAllData(): Promise<void> {
         comments: [],
         lineageSource: 'SFTP Upload',
       },
-      // Exception 2: Prague Central - Water Meter 4 - Unit mismatch (Demo Step 4)
+      // Exception 2: Prague Central - Electricity Meter 4 - Unit mismatch (Demo Step 4)
       {
         id: 'exc-cycle-2026-01-unit-mismatch',
         type: 'Reading',
         status: 'open',
         meterMetadata: {
-          name: 'Prague Central - Water Meter 4',
+          name: 'Prague Central - Electricity Meter 4',
           meterId: 'MCZ2678',
           regionSID: 'RCZ201',
           site: 'Prague Central',
           market: 'CZ',
-          utilityType: 'Water',
+          utilityType: 'Electricity',
         },
         period: {
           startDate: '2026-01-01',

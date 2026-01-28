@@ -9,6 +9,16 @@ import { useDemoMode } from '../contexts/DemoModeContext';
 import { formatTimeAgo } from '../utils/formatters';
 import { ExceptionItem } from '../types';
 
+// Helper function to format exception status display
+const getExceptionStatusDisplay = (exception: ExceptionItem): string => {
+  // For meter (Registry) exceptions that are open, show "Pending manual fixes"
+  if (exception.type === 'Registry' && exception.status === 'open') {
+    return 'Pending manual fixes';
+  }
+  // For all other cases, use the normal status
+  return exception.status.replace('_', ' ');
+};
+
 export default function Exceptions() {
   const location = useLocation();
   const {
@@ -16,59 +26,114 @@ export default function Exceptions() {
     exceptions,
     selectedException,
     loadCycles,
-    loadExceptionsFromMultipleCycles,
+    loadExceptions,
     loadException,
+    clearSelectedException,
     updateException,
     resolveException,
     addComment,
   } = useStore();
   const { isDemoMode, currentStep, updateImpactMetrics, impactMetrics, registerStepCallback, unregisterStepCallback } = useDemoMode();
 
-  // Get initial filter from location state if provided
-  const initialTypeFilter = (location.state as any)?.typeFilter || 'all';
+  // Get initial filters from location state if provided
+  const initialTypeFilter = (location.state as any)?.typeFilter || 'meter';
+  const initialStatusFilter = (location.state as any)?.statusFilter || 'open';
+  const initialCycleId = (location.state as any)?.cycleId;
 
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('open');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'meter' | 'data'>(initialTypeFilter);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>(initialStatusFilter);
+  const [typeFilter, setTypeFilter] = useState<'meter' | 'data'>(initialTypeFilter);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [editingValues, setEditingValues] = useState<any>({});
   const [commentText, setCommentText] = useState('');
+  const [showBulkResolveModal, setShowBulkResolveModal] = useState(false);
+  const [isBulkResolving, setIsBulkResolving] = useState(false);
 
   useEffect(() => {
     loadCycles();
   }, [loadCycles]);
 
+  // Set default cycle: from navigation state, or first cycle with open exceptions
   useEffect(() => {
-    // Load exceptions from all active cycles
-    const activeCycles = cycles.filter(c => c.status === 'awaiting_verification' || c.status === 'in_progress');
+    if (cycles.length > 0 && selectedCycleId === null) {
+      if (initialCycleId) {
+        // Use cycle from navigation state
+        setSelectedCycleId(initialCycleId);
+      } else {
+        // Find first cycle with open exceptions
+        const cycleWithExceptions = cycles.find(c =>
+          (c.status === 'awaiting_verification' || c.status === 'in_progress') &&
+          (c.exceptionCounts.meter > 0 || c.exceptionCounts.data > 0)
+        );
 
-    if (activeCycles.length > 0) {
-      // Load exceptions from ALL active cycles
-      const cycleIds = activeCycles.map(c => c.id);
-      loadExceptionsFromMultipleCycles(cycleIds);
+        if (cycleWithExceptions) {
+          setSelectedCycleId(cycleWithExceptions.id);
+        } else {
+          // If no cycle with open exceptions, use first active cycle
+          const activeCycle = cycles.find(c => c.status === 'awaiting_verification' || c.status === 'in_progress');
+          if (activeCycle) {
+            setSelectedCycleId(activeCycle.id);
+          }
+        }
+      }
     }
-  }, [cycles, loadExceptionsFromMultipleCycles]);
+  }, [cycles, selectedCycleId, initialCycleId]);
 
-  // Auto-select first exception when exceptions load
+  // Load exceptions from selected cycle
   useEffect(() => {
-    if (exceptions.length > 0 && !selectedException) {
-      const firstException = exceptions[0];
-      loadException(firstException.id);
-      setEditingValues({
-        value: firstException.value ?? 0,
-        units: firstException.units,
-        startDate: firstException.period?.startDate,
-        endDate: firstException.period?.endDate,
-        regionSID: firstException.meterMetadata.regionSID,
-      });
+    if (selectedCycleId) {
+      loadExceptions(selectedCycleId);
     }
-  }, [exceptions.length, selectedException, loadException]); // Use length to avoid re-triggering on every exception change
+  }, [selectedCycleId, loadExceptions]);
+
+  // Filter exceptions based on status and type
+  const filteredExceptions = exceptions.filter(exc => {
+    // Status filter
+    let statusMatch = true;
+    if (statusFilter === 'open') statusMatch = exc.status === 'open' || exc.status === 'in_review';
+    else if (statusFilter === 'resolved') statusMatch = exc.status === 'resolved';
+
+    // Type filter - always either 'meter' or 'data' (no 'all' option)
+    const typeMatch = typeFilter === 'meter'
+      ? exc.type === 'Registry'
+      : exc.type === 'Reading' || exc.type === 'UploadFailure';
+
+    return statusMatch && typeMatch;
+  });
+
+  // Auto-select first exception from filtered list when exceptions load or filters change
+  useEffect(() => {
+    if (filteredExceptions.length > 0) {
+      // Check if the currently selected exception is in the filtered list
+      const selectedInList = selectedException && filteredExceptions.some(exc => exc.id === selectedException.id);
+
+      // Only auto-select if there's no selection or the selected exception is not in the filtered list
+      if (!selectedInList) {
+        const firstException = filteredExceptions[0];
+        loadException(firstException.id);
+        setEditingValues({
+          value: firstException.value ?? 0,
+          units: firstException.units,
+          startDate: firstException.period?.startDate,
+          endDate: firstException.period?.endDate,
+          regionSID: firstException.meterMetadata.regionSID,
+        });
+      }
+    } else {
+      // Clear selection if no exceptions in filtered list
+      if (selectedException) {
+        clearSelectedException();
+        setEditingValues({});
+      }
+    }
+  }, [filteredExceptions.length, statusFilter, typeFilter, selectedCycleId]); // Removed selectedException from deps to prevent re-triggering
 
   // Register demo mode callbacks for Steps 3 & 4 - Auto-select specific exceptions
   useEffect(() => {
     if (isDemoMode) {
-      // Step 3: Auto-select Amsterdam South - Water Meter (Registry exception)
+      // Step 3: Auto-select Amsterdam South - Gas Meter (Registry exception)
       const selectStep3Exception = () => {
         const targetException = exceptions.find(
-          exc => exc.meterMetadata.name === 'Amsterdam South - Water Meter'
+          exc => exc.meterMetadata.name === 'Amsterdam South - Gas Meter'
         );
         if (targetException) {
           handleSelectException(targetException);
@@ -94,20 +159,6 @@ export default function Exceptions() {
       };
     }
   }, [isDemoMode, exceptions, registerStepCallback, unregisterStepCallback]);
-
-  const filteredExceptions = exceptions.filter(exc => {
-    // Status filter
-    let statusMatch = true;
-    if (statusFilter === 'open') statusMatch = exc.status === 'open' || exc.status === 'in_review';
-    else if (statusFilter === 'resolved') statusMatch = exc.status === 'resolved';
-
-    // Type filter
-    let typeMatch = true;
-    if (typeFilter === 'meter') typeMatch = exc.type === 'Registry';
-    else if (typeFilter === 'data') typeMatch = exc.type === 'Reading' || exc.type === 'UploadFailure';
-
-    return statusMatch && typeMatch;
-  });
 
   const handleSelectException = (exc: ExceptionItem) => {
     loadException(exc.id);
@@ -255,10 +306,85 @@ export default function Exceptions() {
     loadException(selectedException.id);
   };
 
+  const handleBulkResolve = async () => {
+    if (!selectedCycleId) return;
+
+    setIsBulkResolving(true);
+
+    try {
+      // Get all open meter exceptions in the current filtered list
+      const meterExceptionsToResolve = filteredExceptions.filter(
+        exc => exc.type === 'Registry' && (exc.status === 'open' || exc.status === 'in_review')
+      );
+
+      // Resolve each exception
+      for (const exception of meterExceptionsToResolve) {
+        await resolveException(
+          exception.id,
+          'Bulk resolved - All meter exceptions manually verified and corrected'
+        );
+      }
+
+      // Reload exceptions and cycles
+      await loadExceptions(selectedCycleId);
+      await loadCycles();
+
+      // Clear selected exception if it was resolved
+      if (selectedException && meterExceptionsToResolve.some(e => e.id === selectedException.id)) {
+        clearSelectedException();
+      }
+
+      setShowBulkResolveModal(false);
+
+      // Update demo mode metrics if applicable
+      if (isDemoMode) {
+        updateImpactMetrics({
+          hoursAvoided: impactMetrics.hoursAvoided + (meterExceptionsToResolve.length * 0.5),
+          timeReduction: Math.min(impactMetrics.timeReduction + 5, 85),
+        });
+      }
+    } catch (error) {
+      console.error('Error during bulk resolve:', error);
+      alert('Failed to resolve all exceptions. Please try again.');
+    } finally {
+      setIsBulkResolving(false);
+    }
+  };
+
+  const selectedCycle = cycles.find(c => c.id === selectedCycleId);
+
+  // Count open meter exceptions for bulk resolve button
+  const openMeterExceptionsCount = filteredExceptions.filter(
+    exc => exc.type === 'Registry' && (exc.status === 'open' || exc.status === 'in_review')
+  ).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-segro-charcoal">Exceptions Queue</h1>
+      </div>
+
+      {/* Cycle Selection */}
+      <div className="flex items-center gap-4">
+        <label className="text-sm font-medium text-segro-midgray">Reporting Cycle:</label>
+        <select
+          value={selectedCycleId || ''}
+          onChange={(e) => setSelectedCycleId(e.target.value)}
+          className="flex-1 max-w-md px-4 py-2 border border-segro-lightgray rounded-lg bg-white text-segro-charcoal focus:outline-none focus:ring-2 focus:ring-segro-teal"
+        >
+          {cycles
+            .filter(c => c.status === 'awaiting_verification' || c.status === 'in_progress' || c.status === 'completed')
+            .map(cycle => (
+              <option key={cycle.id} value={cycle.id}>
+                {cycle.name} - {cycle.exceptionCounts.meter + cycle.exceptionCounts.data} open, {cycle.exceptionCounts.meterResolved + cycle.exceptionCounts.dataResolved} resolved
+              </option>
+            ))}
+        </select>
+        {selectedCycle && (
+          <div className="text-sm text-segro-midgray">
+            Status: <span className="font-medium text-segro-charcoal">{selectedCycle.status.replace('_', ' ')}</span>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -291,38 +417,52 @@ export default function Exceptions() {
           </div>
         </div>
 
-        {/* Type Filter */}
+        {/* Type Filter - Tab Style */}
         <div className="flex-1">
-          <label className="text-sm font-medium text-segro-midgray mb-2 block">Filter by Type</label>
-          <div className="flex space-x-2">
-            <Button
-              variant={typeFilter === 'all' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setTypeFilter('all')}
-            >
-              All ({exceptions.length})
-            </Button>
-            <Button
-              variant={typeFilter === 'meter' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setTypeFilter('meter')}
-            >
-              Meter errors ({exceptions.filter(e => e.type === 'Registry').length})
-            </Button>
-            <Button
-              variant={typeFilter === 'data' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setTypeFilter('data')}
-            >
-              Data errors ({exceptions.filter(e => e.type === 'Reading' || e.type === 'UploadFailure').length})
-            </Button>
+          <div className="border-b border-segro-lightgray">
+            <div className="flex space-x-1">
+              <button
+                onClick={() => setTypeFilter('meter')}
+                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                  typeFilter === 'meter'
+                    ? 'text-segro-red border-b-2 border-segro-red'
+                    : 'text-segro-midgray hover:text-segro-charcoal'
+                }`}
+              >
+                Meter Registry Exceptions ({exceptions.filter(e => e.type === 'Registry').length})
+              </button>
+              <button
+                onClick={() => setTypeFilter('data')}
+                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                  typeFilter === 'data'
+                    ? 'text-segro-red border-b-2 border-segro-red'
+                    : 'text-segro-midgray hover:text-segro-charcoal'
+                }`}
+              >
+                Data Validation Errors ({exceptions.filter(e => e.type === 'Reading' || e.type === 'UploadFailure').length})
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Bulk Resolve Button - Only visible for meter exceptions */}
+      {typeFilter === 'meter' && openMeterExceptionsCount > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="primary"
+            onClick={() => setShowBulkResolveModal(true)}
+            disabled={isBulkResolving}
+          >
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Bulk Resolve All Meter Exceptions ({openMeterExceptionsCount})
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Exceptions List */}
-        <div className="lg:col-span-1 space-y-3 max-h-[800px] overflow-y-auto" data-demo="exceptions-list">
+        <div className="lg:col-span-1 space-y-3 max-h-[800px] overflow-y-auto p-1 scrollbar-hide" data-demo="exceptions-list">
           {filteredExceptions.length === 0 ? (
             <Card>
               <div className="text-center text-segro-midgray py-8">
@@ -339,7 +479,7 @@ export default function Exceptions() {
               >
                 <div className="space-y-2">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1">
                       <div className="font-medium text-segro-charcoal">
                         {exc.meterMetadata.name}
                       </div>
@@ -347,6 +487,12 @@ export default function Exceptions() {
                         {exc.meterMetadata.meterId}
                       </div>
                     </div>
+                    <Badge
+                      variant={exc.status === 'resolved' ? 'success' : exc.status === 'in_review' ? 'warning' : 'error'}
+                      size="sm"
+                    >
+                      {getExceptionStatusDisplay(exc)}
+                    </Badge>
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
@@ -385,7 +531,7 @@ export default function Exceptions() {
                     </div>
                   </div>
                   <Badge variant={selectedException.status === 'resolved' ? 'success' : 'default'}>
-                    {selectedException.status}
+                    {getExceptionStatusDisplay(selectedException)}
                   </Badge>
                 </div>
 
@@ -745,6 +891,51 @@ export default function Exceptions() {
           )}
         </div>
       </div>
+
+      {/* Bulk Resolve Confirmation Modal */}
+      {showBulkResolveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <h3 className="text-xl font-bold text-segro-charcoal mb-4">Confirm Bulk Resolve</h3>
+            <p className="text-sm text-segro-midgray mb-6">
+              Are you sure you want to resolve all <span className="font-bold text-segro-charcoal">{openMeterExceptionsCount}</span> open meter exceptions?
+            </p>
+            <p className="text-sm text-segro-midgray mb-6">
+              This action will mark all meter exceptions as resolved with the note:
+              <span className="italic text-segro-charcoal"> "Bulk resolved - All meter exceptions manually verified and corrected"</span>
+            </p>
+
+            <div className="flex space-x-3">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setShowBulkResolveModal(false)}
+                disabled={isBulkResolving}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={handleBulkResolve}
+                disabled={isBulkResolving}
+              >
+                {isBulkResolving ? (
+                  <>
+                    <span className="animate-spin mr-2">⏳</span>
+                    Resolving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Resolve All
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
