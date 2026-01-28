@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, PlayCircle, CheckCircle2, X, RotateCcw } from 'lucide-react';
 import { useDemoMode, demoSteps } from '../contexts/DemoModeContext';
@@ -14,9 +15,39 @@ export default function DemoGuidePanel() {
   const currentStepData = demoSteps[currentStep - 1];
   const isOnCorrectRoute = location.pathname === currentStepData.route;
 
+  // Auto-navigate when step changes
+  useEffect(() => {
+    const navigationState: any = {};
+
+    if (currentStepData.targetCycleId) {
+      navigationState.cycleId = currentStepData.targetCycleId;
+    }
+
+    if (currentStepData.typeFilter) {
+      navigationState.typeFilter = currentStepData.typeFilter;
+    }
+
+    navigate(currentStepData.route, { state: navigationState });
+
+    // Trigger any registered action for this step
+    setTimeout(() => {
+      triggerStepAction(currentStep);
+    }, 100);
+  }, [currentStep]); // Run when currentStep changes
+
   const handleJumpToStep = () => {
-    // Navigate to the route
-    navigate(currentStepData.route);
+    // Navigate to the route with state if targetCycleId or typeFilter is provided
+    const navigationState: any = {};
+
+    if (currentStepData.targetCycleId) {
+      navigationState.cycleId = currentStepData.targetCycleId;
+    }
+
+    if (currentStepData.typeFilter) {
+      navigationState.typeFilter = currentStepData.typeFilter;
+    }
+
+    navigate(currentStepData.route, { state: navigationState });
 
     // Trigger any registered action for this step (e.g., selecting a cycle)
     // Delay slightly to ensure the page has mounted

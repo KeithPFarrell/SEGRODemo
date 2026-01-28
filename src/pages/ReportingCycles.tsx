@@ -36,7 +36,7 @@ export default function ReportingCycles() {
     }
   }, [cycles, selectedCycle]);
 
-  // Register demo mode callbacks for Steps 1 & 6 - Auto-select February 2026 cycle
+  // Register demo mode callbacks for Steps 1, 6, & 9 - Auto-select February 2026 cycle
   useEffect(() => {
     if (isDemoMode) {
       const selectFebruaryCycle = () => {
@@ -46,13 +46,15 @@ export default function ReportingCycles() {
         }
       };
 
-      // Both Step 1 and Step 6 need to select February 2026 cycle
+      // Steps 1, 6, and 9 need to select February 2026 cycle
       registerStepCallback(1, selectFebruaryCycle);
       registerStepCallback(6, selectFebruaryCycle);
+      registerStepCallback(9, selectFebruaryCycle);
 
       return () => {
         unregisterStepCallback(1);
         unregisterStepCallback(6);
+        unregisterStepCallback(9);
       };
     }
   }, [isDemoMode, cycles, registerStepCallback, unregisterStepCallback]);
@@ -347,7 +349,7 @@ export default function ReportingCycles() {
                           onClick={() => handleVerify(true)}
                           disabled={selectedCycle.exceptionCounts.meter > 0 || selectedCycle.exceptionCounts.data > 0}
                           data-demo="verify-upload"
-                          className={isDemoMode && currentStep === 6 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
+                          className={isDemoMode && (currentStep === 6 || currentStep === 9) ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />
                           Verify UL 360 Upload

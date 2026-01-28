@@ -9,6 +9,7 @@ export interface DemoStep {
   autoFillAction?: string;
   targetCycleId?: string;
   targetExceptionName?: string;
+  typeFilter?: 'meter' | 'data';
 }
 
 export const demoSteps: DemoStep[] = [
@@ -27,31 +28,40 @@ export const demoSteps: DemoStep[] = [
     description: 'See the exceptions queue populated with validation failures discovered during orchestration.',
     route: '/exceptions',
     highlightSelector: '[data-demo="exceptions-list"]',
+    targetCycleId: 'cycle-2026-02', // February 2026 Reporting
   },
   {
     id: 3,
-    title: 'Resolve Registry Exception',
-    description: 'Select a Registry exception and mark the meter as added to the central registry (HITL Task 2).',
-    route: '/exceptions',
-    highlightSelector: '[data-demo="registry-resolution"]',
-    autoFillAction: 'resolve-registry',
-    targetExceptionName: 'Amsterdam South - Gas Meter',
-  },
-  {
-    id: 4,
-    title: 'Fix Reading Exception',
-    description: 'Resolve a meter reading exception by correcting the date range (HITL Task 3).',
+    title: 'Fix Data Validation Exception',
+    description: 'Switch to Data Validation Errors tab and resolve the Tilbury meter reading exception by correcting the date range.',
     route: '/exceptions',
     highlightSelector: '[data-demo="apply-date-correction"]',
     autoFillAction: 'fix-reading',
-    targetExceptionName: 'Berlin West - Electricity Meter 7',
+    targetCycleId: 'cycle-2026-02',
+    targetExceptionName: 'Tilbury - Electricity Meter 5',
+    typeFilter: 'data',
+  },
+  {
+    id: 4,
+    title: 'Fix Unit Mismatch Exception',
+    description: 'Resolve the Heathrow Gas Meter unit mismatch by converting units (HITL Task 3).',
+    route: '/exceptions',
+    highlightSelector: '[data-demo="apply-conversion"]',
+    autoFillAction: 'fix-reading',
+    targetCycleId: 'cycle-2026-02',
+    targetExceptionName: 'Heathrow - Gas Meter 8',
+    typeFilter: 'data',
   },
   {
     id: 5,
-    title: 'UL 360 File Prepared',
-    description: 'View the automatically prepared UL 360 upload file ready for submission.',
-    route: '/ul360',
-    highlightSelector: '[data-demo="ul360-files"]',
+    title: 'Fix Negative Value Exception',
+    description: 'Resolve the Park Royal Gas Meter negative value by using absolute value.',
+    route: '/exceptions',
+    highlightSelector: '[data-demo="use-absolute-value"]',
+    autoFillAction: 'fix-reading',
+    targetCycleId: 'cycle-2026-02',
+    targetExceptionName: 'Park Royal - Gas Meter 3',
+    typeFilter: 'data',
   },
   {
     id: 6,
@@ -64,6 +74,42 @@ export const demoSteps: DemoStep[] = [
   },
   {
     id: 7,
+    title: 'Bulk Resolve Meter Exceptions',
+    description: 'Return to exceptions, switch to Meter Registry Exceptions tab, and bulk resolve all meter exceptions.',
+    route: '/exceptions',
+    highlightSelector: '[data-demo="bulk-resolve-button"]',
+    targetCycleId: 'cycle-2026-02',
+    targetExceptionName: 'Manchester West - Gas Meter 12',
+    typeFilter: 'meter',
+  },
+  {
+    id: 8,
+    title: 'Confirm Unusual Value',
+    description: 'Switch to Data Validation Errors tab and confirm the unusual value for Leeds North meter.',
+    route: '/exceptions',
+    highlightSelector: '[data-demo="confirm-value"]',
+    targetCycleId: 'cycle-2026-02',
+    targetExceptionName: 'Leeds North - Electricity Meter 8',
+    typeFilter: 'data',
+  },
+  {
+    id: 9,
+    title: 'Final Verification',
+    description: 'Return to the February reporting cycle and verify the UL 360 upload again.',
+    route: '/cycles',
+    highlightSelector: '[data-demo="verify-upload"]',
+    autoFillAction: 'verify-upload',
+    targetCycleId: 'cycle-2026-02',
+  },
+  {
+    id: 10,
+    title: 'View UL 360 Files',
+    description: 'View the automatically prepared UL 360 upload files ready for submission.',
+    route: '/ul360',
+    highlightSelector: '[data-demo="ul360-files"]',
+  },
+  {
+    id: 11,
     title: 'View Activity Log',
     description: 'Review the complete activity log showing all orchestration steps, user actions, and system events.',
     route: '/activity',

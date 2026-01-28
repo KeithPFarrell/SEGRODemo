@@ -127,23 +127,58 @@ export default function Exceptions() {
     }
   }, [filteredExceptions.length, statusFilter, typeFilter, selectedCycleId]); // Removed selectedException from deps to prevent re-triggering
 
-  // Register demo mode callbacks for Steps 3 & 4 - Auto-select specific exceptions
+  // Register demo mode callbacks for Steps 3, 4, 5, 7, 8 - Auto-select specific exceptions
   useEffect(() => {
     if (isDemoMode) {
-      // Step 3: Auto-select Amsterdam South - Gas Meter (Registry exception)
+      // Step 3: Auto-select Tilbury - Electricity Meter 5 (Date correction exception - Data tab)
       const selectStep3Exception = () => {
+        setTypeFilter('data'); // Switch to data tab
         const targetException = exceptions.find(
-          exc => exc.meterMetadata.name === 'Amsterdam South - Gas Meter'
+          exc => exc.meterMetadata.name === 'Tilbury - Electricity Meter 5'
         );
         if (targetException) {
           handleSelectException(targetException);
         }
       };
 
-      // Step 4: Auto-select Berlin West - Electricity Meter 7 (Date correction exception)
+      // Step 4: Auto-select Heathrow - Gas Meter 8 (Unit mismatch - Data tab)
       const selectStep4Exception = () => {
+        setTypeFilter('data'); // Ensure data tab is selected
         const targetException = exceptions.find(
-          exc => exc.meterMetadata.name === 'Berlin West - Electricity Meter 7'
+          exc => exc.meterMetadata.name === 'Heathrow - Gas Meter 8'
+        );
+        if (targetException) {
+          handleSelectException(targetException);
+        }
+      };
+
+      // Step 5: Auto-select Park Royal - Gas Meter 3 (Negative value - Data tab)
+      const selectStep5Exception = () => {
+        setTypeFilter('data'); // Ensure data tab is selected
+        const targetException = exceptions.find(
+          exc => exc.meterMetadata.name === 'Park Royal - Gas Meter 3'
+        );
+        if (targetException) {
+          handleSelectException(targetException);
+        }
+      };
+
+      // Step 7: Auto-select Manchester West - Gas Meter 12 (Meter Registry - Meter tab)
+      const selectStep7Exception = () => {
+        setTypeFilter('meter'); // Switch to meter tab
+        const targetException = exceptions.find(
+          exc => exc.meterMetadata.name === 'Manchester West - Gas Meter 12'
+        );
+        if (targetException) {
+          handleSelectException(targetException);
+        }
+      };
+
+      // Step 8: Auto-select Leeds North - Electricity Meter 8 (Unusual value - Data tab)
+      const selectStep8Exception = () => {
+        setTypeFilter('data'); // Switch to data tab
+        const targetException = exceptions.find(
+          exc => exc.meterMetadata.name === 'Leeds North - Electricity Meter 8'
         );
         if (targetException) {
           handleSelectException(targetException);
@@ -152,10 +187,16 @@ export default function Exceptions() {
 
       registerStepCallback(3, selectStep3Exception);
       registerStepCallback(4, selectStep4Exception);
+      registerStepCallback(5, selectStep5Exception);
+      registerStepCallback(7, selectStep7Exception);
+      registerStepCallback(8, selectStep8Exception);
 
       return () => {
         unregisterStepCallback(3);
         unregisterStepCallback(4);
+        unregisterStepCallback(5);
+        unregisterStepCallback(7);
+        unregisterStepCallback(8);
       };
     }
   }, [isDemoMode, exceptions, registerStepCallback, unregisterStepCallback]);
@@ -453,6 +494,8 @@ export default function Exceptions() {
             variant="primary"
             onClick={() => setShowBulkResolveModal(true)}
             disabled={isBulkResolving}
+            data-demo="bulk-resolve-button"
+            className={isDemoMode && currentStep === 7 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
           >
             <CheckCircle className="w-4 h-4 mr-2" />
             Bulk Resolve All Meter Exceptions ({openMeterExceptionsCount})
@@ -686,7 +729,7 @@ export default function Exceptions() {
                             variant="primary"
                             onClick={() => handleApplyFix('dates', null)}
                             data-demo="apply-date-correction"
-                            className={isDemoMode && currentStep === 4 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
+                            className={isDemoMode && currentStep === 3 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
                           >
                             Apply Date Correction
                           </Button>
@@ -711,6 +754,8 @@ export default function Exceptions() {
                             <Button
                               variant="primary"
                               onClick={() => handleApplyFix('value', editingValues.value ?? 0)}
+                              data-demo="use-absolute-value"
+                              className={isDemoMode && currentStep === 5 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
                             >
                               Use Absolute Value
                             </Button>
@@ -764,6 +809,8 @@ export default function Exceptions() {
                                 units: 'kWh'
                               });
                             }}
+                            data-demo="apply-conversion"
+                            className={isDemoMode && currentStep === 4 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
                           >
                             Apply Conversion (m³ → kWh)
                           </Button>
@@ -808,6 +855,8 @@ export default function Exceptions() {
                             <Button
                               variant="primary"
                               onClick={() => handleResolveException('Value confirmed accurate with site manager')}
+                              data-demo="confirm-value"
+                              className={isDemoMode && currentStep === 8 ? 'ring-4 ring-yellow-300 ring-offset-2 animate-pulse' : ''}
                             >
                               Confirm Value
                             </Button>
